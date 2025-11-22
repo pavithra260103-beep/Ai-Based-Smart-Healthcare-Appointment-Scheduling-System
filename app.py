@@ -36,31 +36,33 @@ if "answers" not in st.session_state:
 def reset():
     st.session_state.step = 0
     st.session_state.answers = {}
-    st.experimental_rerun()
+    st.rerun()
 
 
 # ================================
 # STEP 0: MAIN SYMPTOM
 # ================================
 if st.session_state.step == 0:
+
     symptom = st.text_input("🩹 What is your main health issue? (example: fever, headache, stomach pain)")
 
     if st.button("Next") and symptom.strip() != "":
         st.session_state.answers["symptom"] = symptom
         st.session_state.step = 1
-        st.experimental_rerun()
+        st.rerun()
 
 
 # ================================
 # STEP 1: NUMBER OF DAYS
 # ================================
 elif st.session_state.step == 1:
+
     days = st.number_input("📆 How many days have you had this issue?", 1, 60)
 
     if st.button("Next"):
         st.session_state.answers["days"] = days
         st.session_state.step = 2
-        st.experimental_rerun()
+        st.rerun()
 
 
 # ================================

@@ -1,124 +1,112 @@
 import streamlit as st
 import pickle
 
-# ---------------------------------------------------------
-# Load ML Models
-# ---------------------------------------------------------
-disease_model = pickle.load(open("disease_model.pkl", "rb"))
-specialist_model = pickle.load(open("specialist_model.pkl", "rb"))
-vectorizer = pickle.load(open("vectorizer.pkl", "rb"))
-disease_encoder = pickle.load(open("disease_encoder.pkl", "rb"))
-specialist_encoder = pickle.load(open("specialist_encoder.pkl", "rb"))
+# ================================
+# Load your ML Models
+# ================================
+@st.cache_resource
+def load_models():
+    disease_model = pickle.load(open("disease_model.pkl", "rb"))
+    specialist_model = pickle.load(open("specialist_model.pkl", "rb"))
+    vectorizer = pickle.load(open("vectorizer.pkl", "rb"))
+    disease_encoder = pickle.load(open("disease_encoder.pkl", "rb"))
+    specialist_encoder = pickle.load(open("specialist_encoder.pkl", "rb"))
+    return disease_model, specialist_model, vectorizer, disease_encoder, specialist_encoder
 
-# ---------------------------------------------------------
-# Doctor Mapping ONLY doctor name
-# ---------------------------------------------------------
-doctor_map = {
-    "Cardiologist": "Dr. Aravind",
-    "General Physician": "Dr. Kishore",
-    "Dermatologist": "Dr. Priya",
-    "Neurologist": "Dr. Manoj",
-    "Gastroenterologist": "Dr. Suresh",
-    "ENT Specialist": "Dr. Kavitha",
-}
 
-# ---------------------------------------------------------
-# Medicine suggestions for minor illness
-# ---------------------------------------------------------
-tablet_recommend = {
-    "fever": "Paracetamol 500mg – 3 times a day",
-    "cold": "Cetirizine – 1 tablet at night",
-    "headache": "Dolo 650mg – 1 tablet",
-    "body pain": "Ibuprofen 400mg – after food",
-}
+disease_model, specialist_model, vectorizer, disease_encoder, specialist_encoder = load_models()
 
-# ---------------------------------------------------------
-# Streamlit Session State for Chatbot
-# ---------------------------------------------------------
+# ================================
+# Streamlit Page Config
+# ================================
+st.set_page_config(page_title="AI Healthcare Assistant", page_icon="🩺", layout="centered")
+st.title("🤖 AI-Based Smart Healthcare Appointment System")
+
+st.write("Answer a few questions and I will recommend medication or a doctor.")
+
+# ================================
+# SESSION STATE
+# ================================
 if "step" not in st.session_state:
-    st.session_state.step = 1
-    st.session_state.symptom = ""
-    st.session_state.days = 0
-    st.session_state.severity = ""
+    st.session_state.step = 0
 
-st.title("🤖 AI Symptom Checker & Smart Doctor Recommendation")
+if "answers" not in st.session_state:
+    st.session_state.answers = {}
 
-# ---------------------------------------------------------
-# STEP 1 → ask initial symptom
-# ---------------------------------------------------------
-if st.session_state.step == 1:
-    st.write("👋 Hello! Tell me your main symptom.")
-    symptom = st.text_input("Example: fever, headache, cold, cough")
+def reset():
+    st.session_state.step = 0
+    st.session_state.answers = {}
+    st.experimental_rerun()
 
-    if st.button("Next"):
-        if symptom.strip() == "":
-            st.warning("Please enter a symptom!")
-        else:
-            st.session_state.symptom = symptom
-            st.session_state.step = 2
-            st.rerun()
 
-# ---------------------------------------------------------
-# STEP 2 → ask how many days
-# ---------------------------------------------------------
-elif st.session_state.step == 2:
-    st.write(f"🩺 How many days have you had **{st.session_state.symptom}**?")
-    days = st.number_input("Days:", min_value=0, max_value=30, step=1)
+# ================================
+# STEP 0: MAIN SYMPTOM
+# ================================
+if st.session_state.step == 0:
+    symptom = st.text_input("🩹 What is your main health issue? (example: fever, headache, stomach pain)")
 
-    if st.button("Next"):
-        st.session_state.days = days
-        st.session_state.step = 3
-        st.rerun()
-
-# ---------------------------------------------------------
-# STEP 3 → ask severity
-# ---------------------------------------------------------
-elif st.session_state.step == 3:
-    st.write("⚠️ How severe is the issue?")
-    severity = st.selectbox("Select severity level", ["mild", "moderate", "severe"])
-
-    if st.button("Get Result"):
-        st.session_state.severity = severity
-        st.session_state.step = 4
-        st.rerun()
-
-# ---------------------------------------------------------
-# STEP 4 → Final Decision Logic + ML Prediction
-# ---------------------------------------------------------
-elif st.session_state.step == 4:
-    st.subheader("🧠 AI Decision Result")
-
-    symptom = st.session_state.symptom
-    days = st.session_state.days
-    severity = st.session_state.severity
-
-    # RULE-BASED LOGIC
-    if severity == "mild" and days <= 2:
-        # Tablet Recommendation
-        if symptom in tablet_recommend:
-            st.success(f"💊 **Recommended Tablet for {symptom}:** {tablet_recommend[symptom]}")
-        else:
-            st.info("This seems mild. Try rest, water, and basic medicine.")
-        st.stop()
-
-    # If not mild → use ML model
-    X = vectorizer.transform([symptom])
-    disease_pred = disease_model.predict(X)[0]
-    specialist_pred = specialist_model.predict(X)[0]
-
-    disease = disease_encoder.inverse_transform([disease_pred])[0]
-    specialist = specialist_encoder.inverse_transform([specialist_pred])[0]
-
-    st.error(f"🧬 Possible Disease: **{disease}**")
-    st.warning(f"👨‍⚕️ Required Specialist: **{specialist}**")
-
-    # Show doctor name
-    if specialist in doctor_map:
-        st.success(f"⭐ Recommended Doctor: **{doctor_map[specialist]}**")
-    else:
-        st.info("Specialist available, but doctor name missing.")
-
-    # Reset button
-    if st.button("Start Over"):
+    if st.button("Next") and symptom.strip() != "":
+        st.session_state.answers["symptom"] = symptom
         st.session_state.step = 1
-        st.rerun()
+        st.experimental_rerun()
+
+
+# ================================
+# STEP 1: NUMBER OF DAYS
+# ================================
+elif st.session_state.step == 1:
+    days = st.number_input("📆 How many days have you had this issue?", 1, 60)
+
+    if st.button("Next"):
+        st.session_state.answers["days"] = days
+        st.session_state.step = 2
+        st.experimental_rerun()
+
+
+# ================================
+# STEP 2: SEVERITY & ML PREDICTION
+# ================================
+elif st.session_state.step == 2:
+
+    symptom = st.session_state.answers["symptom"]
+    days = st.session_state.answers["days"]
+
+    st.subheader("🤖 AI Analysis")
+
+    # Convert symptom into ML vector
+    vector = vectorizer.transform([symptom])
+
+    # Predict disease
+    disease_pred = disease_model.predict(vector)[0]
+    disease_name = disease_encoder.inverse_transform([disease_pred])[0]
+
+    # Predict doctor speciality
+    specialist_pred = specialist_model.predict(vector)[0]
+    specialist_name = specialist_encoder.inverse_transform([specialist_pred])[0]
+
+    # ------------------------------
+    # DECISION LOGIC
+    # ------------------------------
+    if days <= 2:
+        st.success("🟢 Your symptoms seem mild. No doctor required now.")
+
+        st.write(f"### Recommended Tablet for **{symptom}**")
+        st.write("💊 **Paracetamol 500mg** – Take 1 tablet after food (morning & night).")
+        st.write("💧 Drink plenty of water and rest.")
+
+    else:
+        st.error("🔴 Your symptoms seem serious. Doctor consultation needed.")
+
+        st.write("### Recommended Doctor")
+        st.write(f"👨‍⚕️ **Specialist:** {specialist_name}")
+        st.write("🏥 Nearest Hospital: Apollo Hospitals (example)")
+        st.write("📞 Contact: +91 99999 88888")
+
+    st.write("---")
+
+    # Show predicted disease
+    st.info(f"🧬 **Possible Disease:** {disease_name}")
+
+    # Restart Option
+    if st.button("🔄 Start New Diagnosis"):
+        reset()
